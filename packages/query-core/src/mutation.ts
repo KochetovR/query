@@ -201,9 +201,11 @@ export class Mutation<
       networkMode: this.options.networkMode,
       canRun: () => this.#mutationCache.canRun(this),
     })
+    // Keep this execution's retryer stable across synchronous notifications.
+    const retryer = this.#retryer!
 
     const restored = this.state.status === 'pending'
-    const isPaused = !this.#retryer.canStart()
+    const isPaused = !retryer.canStart()
 
     try {
       if (restored) {
@@ -232,7 +234,11 @@ export class Mutation<
           })
         }
       }
-      const data = await this.#retryer.start()
+      // Unpause a mutation that became able to start while onMutate was running
+      if (this.state.isPaused && retryer.canStart()) {
+        onContinue()
+      }
+      const data = await retryer.start()
 
       // Notify cache callback
       await this.#mutationCache.config.onSuccess?.(
